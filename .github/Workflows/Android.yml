@@ -8,28 +8,112 @@ on:
 
 jobs:
   build:
-    name: Build RAIL LIFE 2D
     runs-on: ubuntu-latest
 
     container:
       image: barichello/godot-ci:4.7.2
 
+    env:
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      ANDROID_HOME: /usr/lib/android-sdk
+
     steps:
-      - name: Download project
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepare build folder
-        run: mkdir -p build
+      - name: Prepare environment
+        run: |
+          echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/cmdline-tools/cmdline-tools/bin" >> "$GITHUB_PATH"
+
+          java -version
+          godot --version
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses || true
+          sdkmanager --sdk_root="$ANDROID_HOME" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.1"
+
+      - name: Install Godot export templates
+        run: |
+          mkdir -p "$HOME/.local/share/godot/export_templates/4.7.2.stable"
+
+          curl -L \
+            "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz" \
+            -o /tmp/templates.tpz
+
+          mkdir -p /tmp/godot-templates
+          unzip -oq /tmp/templates.tpz -d /tmp/godot-templates
+
+          cp -a /tmp/godot-templates/templates/. \
+            "$HOME/.local/share/godot/export_templates/4.7.2.stable/"
+
+      - name: Configure Godot Android
+        run: |
+          mkdir -p "$HOME/.config/godot"
+          mkdir -p "$HOME/.android"
+
+          keytool -genkeypair \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA \
+            -validity 10000
+
+          cat > "$HOME/.config/godot/editor_settings-4.7.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/debug_keystore = "$HOME/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          export/android/shutdown_adb_on_exit = false
+          EOF
+
+      - name: Extract project
+        run: |
+          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ZIP not found"
+            exit 1
+          fi
+
+          mkdir -p extracted
+          unzip -oq "$ZIP_FILE" -d extracted
+
+      - name: Find project
+        run: |
+          PROJECT_FILE=$(find extracted -name project.godot | head -n 1)
+
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "project.godot not found"
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$(dirname "$PROJECT_FILE")" >> "$GITHUB_ENV"
 
       - name: Import project
-        run: godot --headless --editor --path . --quit
+        run: |
+          godot --headless --editor --path "$PROJECT_DIR" --quit
 
-      - name: Build Android APK
-        run: godot --headless --path . --export-debug "Android" build/RAIL-LIFE-2D.apk
+      - name: Build APK
+        run: |
+          mkdir -p build
+          godot --headless --path "$PROJECT_DIR" \
+            --export-debug "Android" \
+            "$GITHUB_WORKSPACE/build/RAIL-LIFE-2D.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: RAIL-LIFE-2D-Android
           path: build/RAIL-LIFE-2D.apk
-          
