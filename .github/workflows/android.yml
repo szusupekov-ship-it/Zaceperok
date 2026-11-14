@@ -8,28 +8,48 @@ on:
 
 jobs:
   build:
-    name: Build RAIL LIFE 2D
     runs-on: ubuntu-latest
 
     container:
       image: barichello/godot-ci:4.7.2
 
     steps:
-      - name: Download project
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepare build folder
-        run: mkdir -p build
+      - name: Extract project
+        run: |
+          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
 
-      - name: Import project
-        run: godot --headless --editor --path . --quit
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ZIP archive not found!"
+            exit 1
+          fi
 
-      - name: Build Android APK
-        run: godot --headless --path . --export-debug "Android" build/RAIL-LIFE-2D.apk
+          mkdir -p extracted
+          unzip -q "$ZIP_FILE" -d extracted
+
+      - name: Find project
+        run: |
+          PROJECT_FILE=$(find extracted -name project.godot | head -n 1)
+
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "project.godot not found!"
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$(dirname "$PROJECT_FILE")" >> "$GITHUB_ENV"
+
+      - name: Import
+        run: godot --headless --editor --path "$PROJECT_DIR" --quit
+
+      - name: Build APK
+        run: |
+          mkdir -p build
+          godot --headless --path "$PROJECT_DIR" --export-debug "Android" build/RAIL-LIFE-2D.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: RAIL-LIFE-2D-Android
           path: build/RAIL-LIFE-2D.apk
-          
