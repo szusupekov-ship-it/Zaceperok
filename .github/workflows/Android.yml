@@ -32,8 +32,7 @@ jobs:
         run: |
           java -version
           godot --version
-          command -v curl
-          command -v sdkmanager
+          curl --version
 
       - name: Configure Android SDK
         run: |
@@ -94,6 +93,20 @@ jobs:
           fi
 
           echo "PROJECT_DIR=$(dirname "$PROJECT_FILE")" >> "$GITHUB_ENV"
+
+      - name: Enable ETC2 ASTC compression
+        run: |
+          PROJECT_FILE="$PROJECT_DIR/project.godot"
+
+          if grep -q '^\[rendering\]' "$PROJECT_FILE"; then
+            if grep -q '^textures/vram_compression/import_etc2_astc=' "$PROJECT_FILE"; then
+              sed -i 's/^textures\/vram_compression\/import_etc2_astc=.*/textures\/vram_compression\/import_etc2_astc=true/' "$PROJECT_FILE"
+            else
+              sed -i '/^\[rendering\]/a textures/vram_compression/import_etc2_astc=true' "$PROJECT_FILE"
+            fi
+          else
+            printf '\n[rendering]\ntextures/vram_compression/import_etc2_astc=true\n' >> "$PROJECT_FILE"
+          fi
 
       - name: Create Godot settings
         run: |
