@@ -1,0 +1,35 @@
+
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build RAIL LIFE 2D
+    runs-on: ubuntu-latest
+
+    container:
+      image: barichello/godot-ci:4.7.2
+
+    steps:
+      - name: Download project
+        uses: actions/checkout@v4
+
+      - name: Prepare build folder
+        run: mkdir -p build
+
+      - name: Import project
+        run: godot --headless --editor --path . --quit
+
+      - name: Build Android APK
+        run: godot --headless --path . --export-debug "Android" build/RAIL-LIFE-2D.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RAIL-LIFE-2D-Android
+          path: build/RAIL-LIFE-2D.apk
+          
